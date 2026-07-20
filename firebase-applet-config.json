@@ -1,10 +1,10 @@
 {
-  "projectId": "remixed-project-id",
-  "appId": "remixed-app-id",
-  "apiKey": "remixed-api-key",
-  "authDomain": "remixed-auth-domain",
-  "firestoreDatabaseId": "remixed-firestore-database-id",
-  "storageBucket": "remixed-storage-bucket",
-  "messagingSenderId": "remixed-messaging-sender-id",
-  "measurementId": "remixed-measurement-id"
+  "projectId": "bincom-hackathon-2026",
+  "appId": "1:458597085613:web:28dd95f0a4992d12a87124",
+  "apiKey": "AIzaSyANiKclO-gvh6q0zB_KyH-rk-ijw_JF4Pk",
+  "authDomain": "bincom-hackathon-2026.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "bincom-hackathon-2026.firebasestorage.app",
+  "messagingSenderId": "458597085613",
+  "measurementId": "G-8QMVESNN4D"
 }

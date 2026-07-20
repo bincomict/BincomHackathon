@@ -3,6 +3,8 @@ import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import "dotenv/config";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from "firebase/firestore";
 
 const DEFAULT_CONFIG = {
   name: "Bincom Hackathon September 2026",
@@ -137,29 +139,124 @@ const DEFAULT_CONFIG = {
 const CONFIG_FILE_PATH = path.join(process.cwd(), "hackathon-config.json");
 const REGISTRATIONS_FILE_PATH = path.join(process.cwd(), "registrations.json");
 
-// Helper to get or initialize config
-function getHackathonConfig() {
+enum OperationType {
+  CREATE = "create",
+  UPDATE = "update",
+  DELETE = "delete",
+  LIST = "list",
+  GET = "get",
+  WRITE = "write",
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  };
+}
+
+let dbInstance: any = null;
+
+function getFirestoreDb() {
+  if (!dbInstance) {
+    const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
+    if (!fs.existsSync(firebaseConfigPath)) {
+      throw new Error("firebase-applet-config.json is missing");
+    }
+    const config = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf-8"));
+    if (!config.apiKey || !config.projectId) {
+      throw new Error("Firebase apiKey or projectId is missing in firebase-applet-config.json");
+    }
+    const app = initializeApp(config);
+    dbInstance = getFirestore(app, config.firestoreDatabaseId || "default");
+  }
+  return dbInstance;
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: null,
+      email: null,
+      emailVerified: null,
+      isAnonymous: null,
+      tenantId: null,
+      providerInfo: []
+    },
+    operationType,
+    path
+  };
+  console.error("Firestore Error: ", JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+// Helper to get or initialize config from Firestore with local file fallback
+async function getHackathonConfig() {
   try {
-    if (fs.existsSync(CONFIG_FILE_PATH)) {
-      const fileData = fs.readFileSync(CONFIG_FILE_PATH, "utf-8");
-      return JSON.parse(fileData);
+    const db = getFirestoreDb();
+    const docRef = doc(db, "hackathon_settings", "default_config");
+    let docSnap;
+    try {
+      docSnap = await getDoc(docRef);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.GET, "hackathon_settings/default_config");
+      throw err;
+    }
+
+    if (docSnap.exists()) {
+      return docSnap.data();
     } else {
-      fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(DEFAULT_CONFIG, null, 2), "utf-8");
+      try {
+        await setDoc(docRef, DEFAULT_CONFIG);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, "hackathon_settings/default_config");
+        throw err;
+      }
+      try {
+        fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(DEFAULT_CONFIG, null, 2), "utf-8");
+      } catch (err) {}
       return DEFAULT_CONFIG;
     }
   } catch (error) {
-    console.error("Error reading/writing hackathon-config.json:", error);
+    console.error("Error reading hackathon config from Firestore, falling back to local file:", error);
+    try {
+      if (fs.existsSync(CONFIG_FILE_PATH)) {
+        const fileData = fs.readFileSync(CONFIG_FILE_PATH, "utf-8");
+        return JSON.parse(fileData);
+      }
+    } catch (e) {}
     return DEFAULT_CONFIG;
   }
 }
 
-// Helper to save config
-function saveHackathonConfig(newConfig: typeof DEFAULT_CONFIG) {
+// Helper to save config to Firestore with local backup
+async function saveHackathonConfig(newConfig: typeof DEFAULT_CONFIG) {
   try {
-    fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(newConfig, null, 2), "utf-8");
+    const db = getFirestoreDb();
+    const docRef = doc(db, "hackathon_settings", "default_config");
+    try {
+      await setDoc(docRef, newConfig);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, "hackathon_settings/default_config");
+      throw err;
+    }
+    try {
+      fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(newConfig, null, 2), "utf-8");
+    } catch (err) {}
     return true;
   } catch (error) {
-    console.error("Error saving config:", error);
+    console.error("Error saving config to Firestore:", error);
     return false;
   }
 }
@@ -235,10 +332,10 @@ function replaceEmailPlaceholders(template: string, settings: any, recipient: { 
   return result;
 }
 
-// Scheduled Daily Reminder function (checks hackathon-config.json for date)
+// Scheduled Daily Reminder function (checks Firestore / hackathon-config.json for date)
 async function checkAndSendDailyReminders() {
   try {
-    const settings = getHackathonConfig();
+    const settings = await getHackathonConfig();
 
     const startStr = settings.startDate; // Expect "YYYY-MM-DD" style ISO date for math, or fall back to dates.
     if (!startStr) {
@@ -262,12 +359,27 @@ async function checkAndSendDailyReminders() {
     if (targetDays.includes(diffDays)) {
       console.log(`[Reminder Triggered] Today is exactly ${diffDays} days before the hackathon! Querying registrations...`);
 
-      // Query all registrations from local file
+      // Query all registrations from Firestore, fallback to local file
       let list: any[] = [];
-      if (fs.existsSync(REGISTRATIONS_FILE_PATH)) {
+      try {
+        const db = getFirestoreDb();
+        let querySnapshot;
         try {
-          list = JSON.parse(fs.readFileSync(REGISTRATIONS_FILE_PATH, "utf-8"));
-        } catch (e) {}
+          querySnapshot = await getDocs(collection(db, "registrations"));
+        } catch (err) {
+          handleFirestoreError(err, OperationType.LIST, "registrations");
+          throw err;
+        }
+        querySnapshot.forEach((docSnap) => {
+          list.push({ id: docSnap.id, ...docSnap.data() });
+        });
+      } catch (dbErr) {
+        console.error("Error fetching registrations for reminders from Firestore:", dbErr);
+        if (fs.existsSync(REGISTRATIONS_FILE_PATH)) {
+          try {
+            list = JSON.parse(fs.readFileSync(REGISTRATIONS_FILE_PATH, "utf-8"));
+          } catch (e) {}
+        }
       }
 
       const recipients: any[] = [];
@@ -376,9 +488,10 @@ async function startServer() {
   // Always serve public folder statically so dynamically uploaded flyers are instantly available
   app.use(express.static(path.join(process.cwd(), "public")));
 
-  // API: Get Hackathon config (from local file)
-  app.get("/api/hackathon", (req, res) => {
-    res.json(getHackathonConfig());
+  // API: Get Hackathon config (from Firestore)
+  app.get("/api/hackathon", async (req, res) => {
+    const configData = await getHackathonConfig();
+    res.json(configData);
   });
 
   // API: Admin Login
@@ -455,13 +568,13 @@ async function startServer() {
     }
   });
 
-  // API: Update Hackathon config (Saves to local file)
-  app.post("/api/hackathon", requireAdminAuth, (req, res) => {
+  // API: Update Hackathon config (Saves to Firestore)
+  app.post("/api/hackathon", requireAdminAuth, async (req, res) => {
     const updated = req.body;
     if (!updated || !updated.name) {
       return res.status(400).json({ error: "Invalid hackathon config payload" });
     }
-    saveHackathonConfig(updated);
+    await saveHackathonConfig(updated);
     res.json({ message: "Hackathon configuration updated successfully", config: updated });
   });
 
@@ -488,6 +601,20 @@ async function startServer() {
 
       let docId = `reg_${Date.now()}`;
 
+      // Save to Firestore, fallback/backup to local file
+      try {
+        const db = getFirestoreDb();
+        const docRef = doc(db, "registrations", docId);
+        try {
+          await setDoc(docRef, regData);
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, `registrations/${docId}`);
+          throw err;
+        }
+      } catch (dbErr) {
+        console.error("Error writing registration to Firestore:", dbErr);
+      }
+
       // Fallback local file writing
       let registrations = [];
       if (fs.existsSync(REGISTRATIONS_FILE_PATH)) {
@@ -496,7 +623,9 @@ async function startServer() {
         } catch (e) {}
       }
       registrations.push({ id: docId, ...regData });
-      fs.writeFileSync(REGISTRATIONS_FILE_PATH, JSON.stringify(registrations, null, 2), "utf-8");
+      try {
+        fs.writeFileSync(REGISTRATIONS_FILE_PATH, JSON.stringify(registrations, null, 2), "utf-8");
+      } catch (fsErr) {}
 
       // Read custom Welcome Email Template from settings
       let welcomeSubject = "Welcome to the Bincom Hackathon! - {{role}}";
@@ -530,7 +659,7 @@ async function startServer() {
         reminderEmailSubject: "Reminder: Bincom Hackathon starts in {{days}} days!"
       };
 
-      const localConfig = getHackathonConfig();
+      const localConfig = await getHackathonConfig();
       finalSettings = {
         ...finalSettings,
         ...localConfig
@@ -575,14 +704,31 @@ async function startServer() {
     }
   });
 
-  // API: Retrieve registrations for Admin page
+  // API: Retrieve registrations for Admin page (from Firestore)
   app.get("/api/admin/registrations", requireAdminAuth, async (req, res) => {
     try {
       const roleFilter = req.query.role as string;
       let list: any[] = [];
 
-      if (fs.existsSync(REGISTRATIONS_FILE_PATH)) {
-        list = JSON.parse(fs.readFileSync(REGISTRATIONS_FILE_PATH, "utf-8"));
+      try {
+        const db = getFirestoreDb();
+        let querySnapshot;
+        try {
+          querySnapshot = await getDocs(collection(db, "registrations"));
+        } catch (err) {
+          handleFirestoreError(err, OperationType.LIST, "registrations");
+          throw err;
+        }
+        querySnapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() });
+        });
+      } catch (dbErr) {
+        console.error("Error fetching registrations from Firestore:", dbErr);
+        if (fs.existsSync(REGISTRATIONS_FILE_PATH)) {
+          try {
+            list = JSON.parse(fs.readFileSync(REGISTRATIONS_FILE_PATH, "utf-8"));
+          } catch (e) {}
+        }
       }
 
       // Sort by registration date descending
@@ -599,15 +745,15 @@ async function startServer() {
     }
   });
 
-  // API: Save settings from Admin page directly into local file
-  app.post("/api/admin/settings", requireAdminAuth, (req, res) => {
+  // API: Save settings from Admin page directly into Firestore
+  app.post("/api/admin/settings", requireAdminAuth, async (req, res) => {
     try {
       const updated = req.body;
       if (!updated || !updated.name) {
         return res.status(400).json({ error: "Invalid configurations" });
       }
 
-      saveHackathonConfig(updated);
+      await saveHackathonConfig(updated);
       res.json({ success: true, message: "Settings saved successfully." });
     } catch (err: any) {
       console.error("Error saving settings:", err);
@@ -677,7 +823,7 @@ async function startServer() {
         reminderEmailSubject: "Reminder: Bincom Hackathon starts in {{days}} days!"
       };
 
-      const localConfig = getHackathonConfig();
+      const localConfig = await getHackathonConfig();
       finalSettings = {
         ...finalSettings,
         ...localConfig
