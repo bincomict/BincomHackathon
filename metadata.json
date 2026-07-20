@@ -1,0 +1,8 @@
+{
+  "name": "Bincom Hackathon March 2026",
+  "description": "Official landing and registration portal for the Bincom Hackathon September 2026, themed Hacking genAI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

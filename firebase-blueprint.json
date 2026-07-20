@@ -1,0 +1,146 @@
+{
+  "entities": {
+    "HackathonSettings": {
+      "title": "Hackathon Settings",
+      "description": "Global settings and configuration parameters for the hackathon event",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the hackathon"
+        },
+        "theme": {
+          "type": "string",
+          "description": "The theme of the hackathon"
+        },
+        "edition": {
+          "type": "string",
+          "description": "The edition/version of the hackathon"
+        },
+        "subtitle": {
+          "type": "string",
+          "description": "The subtitle/tagline"
+        },
+        "month": {
+          "type": "string",
+          "description": "The month the hackathon is taking place"
+        },
+        "year": {
+          "type": "string",
+          "description": "The year the hackathon is taking place"
+        },
+        "startDate": {
+          "type": "string",
+          "description": "The starting date label"
+        },
+        "startTime": {
+          "type": "string",
+          "description": "The starting time label"
+        },
+        "endDate": {
+          "type": "string",
+          "description": "The ending date label"
+        },
+        "endTime": {
+          "type": "string",
+          "description": "The ending time label"
+        },
+        "registrationUrl": {
+          "type": "string",
+          "description": "Direct registration link"
+        },
+        "physicalNoticeUrl": {
+          "type": "string",
+          "description": "Notice board URL for physical hubs"
+        },
+        "virtualUrl": {
+          "type": "string",
+          "description": "URL for the virtual kick-off event"
+        },
+        "flyerType": {
+          "type": "string",
+          "description": "Either html or image"
+        },
+        "flyerImageUrl": {
+          "type": "string",
+          "description": "URL path to static flyer image"
+        },
+        "logoUrl": {
+          "type": "string",
+          "description": "URL path to event logo image"
+        },
+        "welcomeEmailSubject": {
+          "type": "string",
+          "description": "Resend Welcome Email Subject template"
+        },
+        "welcomeEmailBody": {
+          "type": "string",
+          "description": "Resend Welcome Email Body template"
+        },
+        "reminderEmailSubject": {
+          "type": "string",
+          "description": "Resend Reminder Email Subject template"
+        },
+        "reminderEmailBody": {
+          "type": "string",
+          "description": "Resend Reminder Email Body template"
+        },
+        "locations": {
+          "type": "array",
+          "description": "Physical hubs hosting the hackathon"
+        },
+        "timeline": {
+          "type": "array",
+          "description": "Scheduled milestones and deadlines"
+        },
+        "faqs": {
+          "type": "array",
+          "description": "Frequently Asked Questions array"
+        }
+      },
+      "required": ["name", "theme"]
+    },
+    "Registration": {
+      "title": "Registration",
+      "description": "A participant registration for the hackathon",
+      "type": "object",
+      "properties": {
+        "fullName": {
+          "type": "string",
+          "description": "The full name of the registrant"
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the registrant"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Phone number of the registrant"
+        },
+        "role": {
+          "type": "string",
+          "description": "Chosen role (Participant, Observer, Community Judge)"
+        },
+        "linkedinUrl": {
+          "type": "string",
+          "description": "Optional LinkedIn profile link"
+        },
+        "registeredAt": {
+          "type": "string",
+          "description": "ISO timestamp of when they registered"
+        }
+      },
+      "required": ["fullName", "email", "phone", "role", "registeredAt"]
+    }
+  },
+  "firestore": {
+    "/hackathon_settings/{settingId}": {
+      "schema": "HackathonSettings",
+      "description": "Settings collection containing global configs"
+    },
+    "/registrations/{registrationId}": {
+      "schema": "Registration",
+      "description": "Users registrations collection"
+    }
+  }
+}

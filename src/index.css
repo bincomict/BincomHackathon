@@ -1,0 +1,33 @@
+@import url('https://fonts.googleapis.com/css2?family=Cabin:ital,wght@0,400..700;1,400..700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Humanist521B", "Humanist 521 BT", "Humanist521 BT", "Cabin", "Gill Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Humanist521B", "Humanist 521 BT", "Humanist521 BT", "Cabin", "Gill Sans", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
+  --color-brand-primary: #90c649; /* rgb(144, 198, 73) */
+  --color-brand-dark: #628a2d; /* darker shade for text/accents */
+  --color-brand-light: #f3f9e9; /* soft background tint */
+  --color-brand-banner: #a2da57; /* vibrant banner shade */
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 font-sans antialiased selection:bg-brand-primary selection:text-white;
+  }
+}
+
+/* Custom scrollbars for the scrollable terms and locations container */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-slate-200 rounded-full hover:bg-slate-300;
+}

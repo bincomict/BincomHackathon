@@ -1,0 +1,182 @@
+{
+  "name": "Bincom Hackathon September 2026",
+  "theme": "Hacking genAI",
+  "edition": "5.0",
+  "subtitle": "Building the Next Big Thing with generative AI in 24 Hours or Less.",
+  "month": "September",
+  "year": "2026",
+  "startDate": "Friday, September 18th, 2026",
+  "startTime": "6:00 PM WAT",
+  "endDate": "Saturday, September 19th, 2026",
+  "endTime": "7:00 PM WAT",
+  "registrationUrl": "bincom.net/hackathon",
+  "physicalNoticeUrl": "http://bincomdevcenter.com/communityevents",
+  "flyerType": "html",
+  "flyerImageUrl": "/bincom_hackathon_flyer.jpg",
+  "virtualUrl": "https://bincom.net/virtual-hackathon",
+  "locations": [
+    {
+      "name": "Ikorodu",
+      "cityOrState": "Lagos",
+      "country": "Nigeria",
+      "isVirtual": false,
+      "link": "http://bincomdevcenter.com/communityevents"
+    },
+    {
+      "name": "Zawaciki",
+      "cityOrState": "Kano",
+      "country": "Nigeria",
+      "isVirtual": false,
+      "link": "http://bincomdevcenter.com/communityevents"
+    },
+    {
+      "name": "Yaba",
+      "cityOrState": "Lagos",
+      "country": "Nigeria",
+      "isVirtual": false,
+      "link": "http://bincomdevcenter.com/communityevents"
+    },
+    {
+      "name": "Ikeja",
+      "cityOrState": "Lagos",
+      "country": "Nigeria",
+      "isVirtual": false,
+      "link": "http://bincomdevcenter.com/communityevents"
+    },
+    {
+      "name": "Ikotun",
+      "cityOrState": "Lagos",
+      "country": "Nigeria",
+      "isVirtual": false,
+      "link": "http://bincomdevcenter.com/communityevents"
+    },
+    {
+      "name": "Ikoyi",
+      "cityOrState": "Lagos",
+      "country": "Nigeria",
+      "isVirtual": false,
+      "link": "http://bincomdevcenter.com/communityevents"
+    },
+    {
+      "name": "Okota",
+      "cityOrState": "Lagos",
+      "country": "Nigeria",
+      "isVirtual": false,
+      "link": "http://bincomdevcenter.com/communityevents"
+    },
+    {
+      "name": "Ikota",
+      "cityOrState": "Lagos",
+      "country": "Nigeria",
+      "isVirtual": false,
+      "link": "http://bincomdevcenter.com/communityevents"
+    },
+    {
+      "name": "Ejigbo",
+      "cityOrState": "Lagos",
+      "country": "Nigeria",
+      "isVirtual": false,
+      "link": "http://bincomdevcenter.com/communityevents"
+    },
+    {
+      "name": "Oshodi",
+      "cityOrState": "Lagos",
+      "country": "Nigeria",
+      "isVirtual": false,
+      "link": "http://bincomdevcenter.com/communityevents"
+    },
+    {
+      "name": "Ayobo",
+      "cityOrState": "Lagos",
+      "country": "Nigeria",
+      "isVirtual": false,
+      "link": "http://bincomdevcenter.com/communityevents"
+    },
+    {
+      "name": "Nottingham",
+      "cityOrState": "England",
+      "country": "United Kingdom",
+      "isVirtual": false,
+      "link": "http://bincomdevcenter.com/communityevents"
+    },
+    {
+      "name": "Tbilisi",
+      "cityOrState": "Tbilisi",
+      "country": "Georgia",
+      "isVirtual": false,
+      "link": "http://bincomdevcenter.com/communityevents"
+    },
+    {
+      "name": "Kampala",
+      "cityOrState": "Kampala",
+      "country": "Uganda",
+      "isVirtual": false,
+      "link": "http://bincomdevcenter.com/communityevents"
+    }
+  ],
+  "timeline": [
+    {
+      "id": "t1",
+      "title": "virtual kick-off event",
+      "date": "Thursday, September 17th, 2026 (6:00 PM WAT)",
+      "description": "The Bincom Hackathon virtual kick-off event is designed to answer all your hackathon questions and officially kick start the 24 hours event.",
+      "highlighted": true,
+      "url": "https://bincom.net/hackathon",
+      "linkText": "Register for event"
+    },
+    {
+      "id": "t2",
+      "title": "Team Registration Virtual Check-In Event",
+      "date": "Friday, September 18th, 2026 (11:00 AM - 12 noon WAT)",
+      "description": "designed to resolve issues relating to team registration."
+    },
+    {
+      "id": "t3",
+      "title": "Team Registration Deadline",
+      "date": "Friday, September 18th, 2026 (12:00 noon WAT)",
+      "description": "All Teams must ensure they complete the team registration form.",
+      "url": "https://bincom.net/bincomhackathon_teamregistration",
+      "linkText": "Register Team"
+    },
+    {
+      "id": "t4",
+      "title": "Product Submission Virtual Check-In Event",
+      "date": "Friday, September 18th, 2026 (6:00 PM - 7:00 PM WAT)",
+      "description": "designed to ensure all teams submit their products before deadline"
+    },
+    {
+      "id": "t5",
+      "title": "Product Submission Deadline",
+      "date": "Friday, September 18th, 2026 (7:00 PM WAT)",
+      "description": "All Products developed during the Hackathon must be submitted.",
+      "url": "https://bincom.net/bincomhackathon_productsubmission"
+    },
+    {
+      "id": "t6",
+      "title": "Community Judges - Feedback Submission",
+      "date": "Saturday, September 19th - Monday, September 21st, 2026 (7:00 PM WAT)",
+      "description": "All Community Judges must submit their feedback. Judges will be contacted with specific instructions."
+    },
+    {
+      "id": "t7",
+      "title": "Public Voting & Feedback",
+      "date": "Tuesday, September 22nd - Thursday, September 24th, 2026",
+      "description": "Public voting session where projects receive peer review and feedback on our social platforms.",
+      "url": "https://www.linkedin.com/company/bincomdevcenter/"
+    },
+    {
+      "id": "t8",
+      "title": "Team Presentation to Expert Judges (Optional)",
+      "date": "Thursday, September 24th, 2026 (5:00 PM WAT)",
+      "description": "The top 5 teams will present and demo their innovations to our expert panel of judges."
+    },
+    {
+      "id": "t9",
+      "title": "Hackathon Winner 🏆 Announcement",
+      "date": "Friday, September 25th, 2026",
+      "description": "Grand announcement of the winning team and the first and second runner up teams",
+      "highlighted": true
+    }
+  ],
+  "logoUrl": "/logo_1782886134120_logo.png"
+}
