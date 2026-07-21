@@ -166,8 +166,12 @@ interface FirestoreErrorInfo {
 }
 
 let dbInstance: any = null;
+let isFirestoreDisabled = false;
 
 function getFirestoreDb() {
+  if (isFirestoreDisabled) {
+    throw new Error("Firestore is currently disabled due to API or permission errors.");
+  }
   if (!dbInstance) {
     const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
     if (!fs.existsSync(firebaseConfigPath)) {
@@ -178,14 +182,30 @@ function getFirestoreDb() {
       throw new Error("Firebase apiKey or projectId is missing in firebase-applet-config.json");
     }
     const app = initializeApp(config);
-    dbInstance = getFirestore(app, config.firestoreDatabaseId || "default");
+    const dbId = config.firestoreDatabaseId;
+    if (dbId && dbId !== "(default)" && dbId !== "default") {
+      dbInstance = getFirestore(app, dbId);
+    } else {
+      dbInstance = getFirestore(app);
+    }
   }
   return dbInstance;
 }
 
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errMsg = error instanceof Error ? error.message : String(error);
+  if (
+    errMsg.includes("PERMISSION_DENIED") ||
+    errMsg.includes("permission-denied") ||
+    errMsg.includes("not been used in project") ||
+    errMsg.includes("disabled") ||
+    errMsg.includes("client is offline")
+  ) {
+    console.warn("Firestore API appears to be disabled, offline, or unauthorized. Activating local-only fallback circuit breaker.");
+    isFirestoreDisabled = true;
+  }
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errMsg,
     authInfo: {
       userId: null,
       email: null,
@@ -201,14 +221,41 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
+// Timeout utility to protect Firestore calls from hanging indefinitely
+async function runWithTimeout<T>(promise: Promise<T>, timeoutMs: number = 4000): Promise<T> {
+  let timeoutId: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Firestore operation timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    clearTimeout(timeoutId);
+    return result;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
+
 // Helper to get or initialize config from Firestore with local file fallback
 async function getHackathonConfig() {
+  if (isFirestoreDisabled) {
+    try {
+      if (fs.existsSync(CONFIG_FILE_PATH)) {
+        const fileData = fs.readFileSync(CONFIG_FILE_PATH, "utf-8");
+        return JSON.parse(fileData);
+      }
+    } catch (e) {}
+    return DEFAULT_CONFIG;
+  }
   try {
     const db = getFirestoreDb();
     const docRef = doc(db, "hackathon_settings", "default_config");
     let docSnap;
     try {
-      docSnap = await getDoc(docRef);
+      docSnap = await runWithTimeout(getDoc(docRef));
     } catch (err) {
       handleFirestoreError(err, OperationType.GET, "hackathon_settings/default_config");
       throw err;
@@ -218,7 +265,7 @@ async function getHackathonConfig() {
       return docSnap.data();
     } else {
       try {
-        await setDoc(docRef, DEFAULT_CONFIG);
+        await runWithTimeout(setDoc(docRef, DEFAULT_CONFIG));
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, "hackathon_settings/default_config");
         throw err;
@@ -243,17 +290,22 @@ async function getHackathonConfig() {
 // Helper to save config to Firestore with local backup
 async function saveHackathonConfig(newConfig: typeof DEFAULT_CONFIG) {
   try {
+    fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(newConfig, null, 2), "utf-8");
+  } catch (err) {}
+
+  if (isFirestoreDisabled) {
+    return true;
+  }
+
+  try {
     const db = getFirestoreDb();
     const docRef = doc(db, "hackathon_settings", "default_config");
     try {
-      await setDoc(docRef, newConfig);
+      await runWithTimeout(setDoc(docRef, newConfig));
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "hackathon_settings/default_config");
       throw err;
     }
-    try {
-      fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(newConfig, null, 2), "utf-8");
-    } catch (err) {}
     return true;
   } catch (error) {
     console.error("Error saving config to Firestore:", error);
@@ -361,20 +413,27 @@ async function checkAndSendDailyReminders() {
 
       // Query all registrations from Firestore, fallback to local file
       let list: any[] = [];
-      try {
-        const db = getFirestoreDb();
-        let querySnapshot;
+      let fetchedFromFirestore = false;
+      if (!isFirestoreDisabled) {
         try {
-          querySnapshot = await getDocs(collection(db, "registrations"));
-        } catch (err) {
-          handleFirestoreError(err, OperationType.LIST, "registrations");
-          throw err;
+          const db = getFirestoreDb();
+          let querySnapshot;
+          try {
+            querySnapshot = await runWithTimeout(getDocs(collection(db, "registrations")));
+          } catch (err) {
+            handleFirestoreError(err, OperationType.LIST, "registrations");
+            throw err;
+          }
+          querySnapshot.forEach((docSnap) => {
+            list.push({ id: docSnap.id, ...docSnap.data() });
+          });
+          fetchedFromFirestore = true;
+        } catch (dbErr) {
+          console.error("Error fetching registrations for reminders from Firestore:", dbErr);
         }
-        querySnapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() });
-        });
-      } catch (dbErr) {
-        console.error("Error fetching registrations for reminders from Firestore:", dbErr);
+      }
+
+      if (!fetchedFromFirestore) {
         if (fs.existsSync(REGISTRATIONS_FILE_PATH)) {
           try {
             list = JSON.parse(fs.readFileSync(REGISTRATIONS_FILE_PATH, "utf-8"));
@@ -601,18 +660,20 @@ async function startServer() {
 
       let docId = `reg_${Date.now()}`;
 
-      // Save to Firestore, fallback/backup to local file
-      try {
-        const db = getFirestoreDb();
-        const docRef = doc(db, "registrations", docId);
+            // Save to Firestore, fallback/backup to local file
+      if (!isFirestoreDisabled) {
         try {
-          await setDoc(docRef, regData);
-        } catch (err) {
-          handleFirestoreError(err, OperationType.WRITE, `registrations/${docId}`);
-          throw err;
+          const db = getFirestoreDb();
+          const docRef = doc(db, "registrations", docId);
+          try {
+            await runWithTimeout(setDoc(docRef, regData));
+          } catch (err) {
+            handleFirestoreError(err, OperationType.WRITE, `registrations/${docId}`);
+            throw err;
+          }
+        } catch (dbErr) {
+          console.error("Error writing registration to Firestore:", dbErr);
         }
-      } catch (dbErr) {
-        console.error("Error writing registration to Firestore:", dbErr);
       }
 
       // Fallback local file writing
@@ -710,20 +771,27 @@ async function startServer() {
       const roleFilter = req.query.role as string;
       let list: any[] = [];
 
-      try {
-        const db = getFirestoreDb();
-        let querySnapshot;
+      let fetchedFromFirestore = false;
+      if (!isFirestoreDisabled) {
         try {
-          querySnapshot = await getDocs(collection(db, "registrations"));
-        } catch (err) {
-          handleFirestoreError(err, OperationType.LIST, "registrations");
-          throw err;
+          const db = getFirestoreDb();
+          let querySnapshot;
+          try {
+            querySnapshot = await runWithTimeout(getDocs(collection(db, "registrations")));
+          } catch (err) {
+            handleFirestoreError(err, OperationType.LIST, "registrations");
+            throw err;
+          }
+          querySnapshot.forEach((doc) => {
+            list.push({ id: doc.id, ...doc.data() });
+          });
+          fetchedFromFirestore = true;
+        } catch (dbErr) {
+          console.error("Error fetching registrations from Firestore:", dbErr);
         }
-        querySnapshot.forEach((doc) => {
-          list.push({ id: doc.id, ...doc.data() });
-        });
-      } catch (dbErr) {
-        console.error("Error fetching registrations from Firestore:", dbErr);
+      }
+
+      if (!fetchedFromFirestore) {
         if (fs.existsSync(REGISTRATIONS_FILE_PATH)) {
           try {
             list = JSON.parse(fs.readFileSync(REGISTRATIONS_FILE_PATH, "utf-8"));

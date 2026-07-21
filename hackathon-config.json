@@ -14,6 +14,16 @@
   "flyerType": "html",
   "flyerImageUrl": "/bincom_hackathon_flyer.jpg",
   "virtualUrl": "https://bincom.net/virtual-hackathon",
+  "logoUrl": "/logo.png",
+  "whatsapp_link": "https://chat.whatsapp.com/BincomHackathon",
+  "slack_link": "https://bincom.net/bincomtechnetwork",
+  "kickoff_event_link": "https://bincom.net/hackathon",
+  "startDateFormatted": "Friday, September 18th, 2026",
+  "endDateFormatted": "Saturday, September 19th, 2026",
+  "welcomeEmailSubject": "Confirming your Bincom Hackathon Registration - {{role}}",
+  "welcome_email_template": "<h2>Hello {{name}},</h2>\n<p>Thank you for registering for the <strong>Bincom Hackathon</strong> as a <strong>{{role}}</strong>!</p>\n<p>Here are your essential onboarding links:</p>\n<ul>\n  <li><strong>WhatsApp Group:</strong> <a href=\"{{whatsapp_link}}\">{{whatsapp_link}}</a></li>\n  <li><strong>Slack Channel:</strong> <a href=\"{{slack_link}}\">{{slack_link}}</a></li>\n  <li><strong>Kick-off Event:</strong> <a href=\"{{kickoff_event_link}}\">{{kickoff_event_link}}</a></li>\n</ul>\n<p>The hackathon starts on <strong>{{start_date}}</strong> and ends on <strong>{{end_date}}</strong>.</p>\n<p>Get ready to hack!</p>",
+  "reminderEmailSubject": "Reminder: Bincom Hackathon starts in {{days}} days!",
+  "reminder_email_template": "<h2>Hello {{name}},</h2>\n<p>This is a quick reminder that the <strong>Bincom Hackathon</strong> is starting in exactly <strong>{{days}} days</strong>!</p>\n<p>Here are your essential onboarding links to prepare:</p>\n<ul>\n  <li><strong>WhatsApp Group:</strong> <a href=\"{{whatsapp_link}}\">{{whatsapp_link}}</a></li>\n  <li><strong>Slack Channel:</strong> <a href=\"{{slack_link}}\">{{slack_link}}</a></li>\n  <li><strong>Kick-off Event:</strong> <a href=\"{{kickoff_event_link}}\">{{kickoff_event_link}}</a></li>\n</ul>\n<p>Start Date: <strong>{{start_date}}</strong></p>\n<p>Get ready to hack!</p>",
   "locations": [
     {
       "name": "Ikorodu",
@@ -177,6 +187,5 @@
       "description": "Grand announcement of the winning team and the first and second runner up teams",
       "highlighted": true
     }
-  ],
-  "logoUrl": "/logo_1782886134120_logo.png"
+  ]
 }
