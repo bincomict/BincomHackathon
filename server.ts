@@ -293,13 +293,13 @@ async function getHackathonConfig() {
 }
 
 // Helper to save config to Firestore with local backup
-async function saveHackathonConfig(newConfig: typeof DEFAULT_CONFIG) {
+async function saveHackathonConfig(newConfig: typeof DEFAULT_CONFIG): Promise<{ firestoreSynced: boolean; error?: string }> {
   try {
     fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(newConfig, null, 2), "utf-8");
   } catch (err) {}
 
   if (isFirestoreDisabled) {
-    return true;
+    return { firestoreSynced: false, error: "Firestore is disabled" };
   }
 
   try {
@@ -311,10 +311,10 @@ async function saveHackathonConfig(newConfig: typeof DEFAULT_CONFIG) {
       handleFirestoreError(err, OperationType.WRITE, "hackathon_settings/default_config");
       throw err;
     }
-    return true;
-  } catch (error) {
+    return { firestoreSynced: true };
+  } catch (error: any) {
     console.error("Error saving config to Firestore:", error);
-    return false;
+    return { firestoreSynced: false, error: error?.message || String(error) };
   }
 }
 
@@ -752,8 +752,18 @@ async function startServer() {
     if (!updated || !updated.name) {
       return res.status(400).json({ error: "Invalid hackathon config payload" });
     }
-    await saveHackathonConfig(updated);
-    res.json({ message: "Hackathon configuration updated successfully", config: updated });
+    const saveResult = await saveHackathonConfig(updated);
+    if (saveResult.firestoreSynced) {
+      res.json({ success: true, message: "Hackathon configuration updated successfully", config: updated, firestoreSynced: true });
+    } else {
+      res.json({
+        success: true,
+        message: "Hackathon configuration updated locally, but Firestore sync failed.",
+        config: updated,
+        firestoreSynced: false,
+        warning: `Firestore sync failed: ${saveResult.error || "Unknown error"}`
+      });
+    }
   });
 
   // API: User Registration with Resend welcome email triggering
@@ -940,8 +950,17 @@ async function startServer() {
         return res.status(400).json({ error: "Invalid configurations" });
       }
 
-      await saveHackathonConfig(updated);
-      res.json({ success: true, message: "Settings saved successfully." });
+      const saveResult = await saveHackathonConfig(updated);
+      if (saveResult.firestoreSynced) {
+        res.json({ success: true, firestoreSynced: true, message: "Settings saved successfully." });
+      } else {
+        res.json({
+          success: true,
+          firestoreSynced: false,
+          warning: `Firestore sync failed: ${saveResult.error || "Unknown error"}`,
+          message: "Settings saved locally, but Firestore sync failed."
+        });
+      }
     } catch (err: any) {
       console.error("Error saving settings:", err);
       res.status(500).json({ error: "Failed to save settings: " + err.message });

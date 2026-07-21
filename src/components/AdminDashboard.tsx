@@ -3,7 +3,7 @@ import { HackathonConfig, Registration, FaqItem, TimelineEvent } from "../types"
 import { 
   Settings, Save, Filter, Download, Mail, Send, CheckCircle, 
   XCircle, Calendar, Plus, Trash, Clock, HelpCircle, ArrowLeft, RefreshCw, Layers,
-  Lock, LogOut, MapPin
+  Lock, LogOut, MapPin, AlertTriangle
 } from "lucide-react";
 
 interface AdminDashboardProps {
@@ -23,7 +23,7 @@ export default function AdminDashboard({ onBackToSite }: AdminDashboardProps) {
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [status, setStatus] = useState<{ type: "success" | "warning" | "error"; message: string } | null>(null);
 
   // Test Email States
   const [testTo, setTestTo] = useState<string>("");
@@ -87,8 +87,8 @@ export default function AdminDashboard({ onBackToSite }: AdminDashboardProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert("Logo must be smaller than 5MB");
+    if (file.size > 15 * 1024 * 1024) {
+      alert("Logo must be smaller than 15MB");
       return;
     }
 
@@ -101,7 +101,44 @@ export default function AdminDashboard({ onBackToSite }: AdminDashboardProps) {
           handleLogout();
           return;
         }
-        const base64Data = reader.result as string;
+        let base64Data = reader.result as string;
+
+        // Auto-compress / scale down logo to keep firestore safe and fast
+        try {
+          base64Data = await new Promise<string>((resolve) => {
+            const img = new Image();
+            img.src = base64Data;
+            img.onload = () => {
+              const maxW = 400;
+              const maxH = 400;
+              let w = img.width;
+              let h = img.height;
+              if (w > maxW || h > maxH) {
+                if (w > h) {
+                  h = Math.round((h * maxW) / w);
+                  w = maxW;
+                } else {
+                  w = Math.round((w * maxH) / h);
+                  h = maxH;
+                }
+              }
+              const canvas = document.createElement("canvas");
+              canvas.width = w;
+              canvas.height = h;
+              const ctx = canvas.getContext("2d");
+              if (ctx) {
+                ctx.drawImage(img, 0, 0, w, h);
+                resolve(canvas.toDataURL("image/png", 0.85));
+              } else {
+                resolve(base64Data);
+              }
+            };
+            img.onerror = () => resolve(base64Data);
+          });
+        } catch (compressErr) {
+          console.warn("Logo compression bypassed:", compressErr);
+        }
+
         const response = await fetch("/api/upload-flyer", {
           method: "POST",
           headers: { 
@@ -137,8 +174,20 @@ export default function AdminDashboard({ onBackToSite }: AdminDashboardProps) {
           throw new Error(`Server returned an invalid response (Status: ${response.status}). The image might be too large or of an unsupported format. Response preview: ${resText.slice(0, 150)}`);
         }
 
-        setConfig((prev: any) => ({ ...prev, logoUrl: data.url }));
-        setStatus({ type: "success", message: "Logo uploaded successfully! Save settings to apply." });
+        const updatedConfig = { ...config, logoUrl: data.url };
+        setConfig(updatedConfig);
+
+        setStatus({ type: "success", message: "Saving logo..." });
+        const saveRes = await persistConfig(updatedConfig, token);
+        if (saveRes.ok) {
+          if (saveRes.firestoreSynced) {
+            setStatus({ type: "success", message: "Logo uploaded and applied to the live site." });
+          } else {
+            setStatus({ type: "warning", message: `Logo uploaded, but failed to sync to live database (${saveRes.message}). Click "Save Settings" to retry.` });
+          }
+        } else {
+          setStatus({ type: "error", message: `Logo uploaded, but failed to save automatically: ${saveRes.message}` });
+        }
       } catch (err: any) {
         alert(err.message || "Failed to upload logo.");
       } finally {
@@ -152,8 +201,8 @@ export default function AdminDashboard({ onBackToSite }: AdminDashboardProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      alert("Flyer image must be smaller than 10MB");
+    if (file.size > 20 * 1024 * 1024) {
+      alert("Flyer image must be smaller than 20MB");
       return;
     }
 
@@ -166,14 +215,52 @@ export default function AdminDashboard({ onBackToSite }: AdminDashboardProps) {
           handleLogout();
           return;
         }
-        const base64Data = reader.result as string;
+        let base64Data = reader.result as string;
+
+        // Auto-compress / scale down flyer to max 1200px and 75% JPEG quality to ensure it fits <1MB Firestore limit
+        try {
+          base64Data = await new Promise<string>((resolve) => {
+            const img = new Image();
+            img.src = base64Data;
+            img.onload = () => {
+              const maxW = 1200;
+              const maxH = 1200;
+              let w = img.width;
+              let h = img.height;
+              if (w > maxW || h > maxH) {
+                if (w > h) {
+                  h = Math.round((h * maxW) / w);
+                  w = maxW;
+                } else {
+                  w = Math.round((w * maxH) / h);
+                  h = maxH;
+                }
+              }
+              const canvas = document.createElement("canvas");
+              canvas.width = w;
+              canvas.height = h;
+              const ctx = canvas.getContext("2d");
+              if (ctx) {
+                ctx.drawImage(img, 0, 0, w, h);
+                // flyer is large, JPEG with 0.75 quality is extremely well-compressed and keeps details high
+                resolve(canvas.toDataURL("image/jpeg", 0.75));
+              } else {
+                resolve(base64Data);
+              }
+            };
+            img.onerror = () => resolve(base64Data);
+          });
+        } catch (compressErr) {
+          console.warn("Flyer compression bypassed:", compressErr);
+        }
+
         const response = await fetch("/api/upload-flyer", {
           method: "POST",
           headers: { 
             "Content-Type": "application/json",
             "Authorization": `Bearer ${token}`
           },
-          body: JSON.stringify({ image: base64Data, fileName: `flyer_${Date.now()}_${file.name}` }),
+          body: JSON.stringify({ image: base64Data, fileName: `flyer_${Date.now()}_${file.name.replace(/\.[^/.]+$/, "")}.jpg` }),
         });
 
         if (response.status === 401) {
@@ -202,8 +289,20 @@ export default function AdminDashboard({ onBackToSite }: AdminDashboardProps) {
           throw new Error(`Server returned an invalid response (Status: ${response.status}). The image might be too large or of an unsupported format. Response preview: ${resText.slice(0, 150)}`);
         }
 
-        setConfig((prev: any) => ({ ...prev, flyerImageUrl: data.url, flyerType: "image" }));
-        setStatus({ type: "success", message: "Flyer uploaded successfully! Save settings to apply." });
+        const updatedConfig = { ...config, flyerImageUrl: data.url, flyerType: "image" };
+        setConfig(updatedConfig);
+
+        setStatus({ type: "success", message: "Saving flyer..." });
+        const saveRes = await persistConfig(updatedConfig, token);
+        if (saveRes.ok) {
+          if (saveRes.firestoreSynced) {
+            setStatus({ type: "success", message: "Flyer uploaded and applied to the live site." });
+          } else {
+            setStatus({ type: "warning", message: `Flyer uploaded, but failed to sync to live database (${saveRes.message}). Click "Save Settings" to retry.` });
+          }
+        } else {
+          setStatus({ type: "error", message: `Flyer uploaded, but failed to save automatically: ${saveRes.message}` });
+        }
       } catch (err: any) {
         alert(err.message || "Failed to upload flyer.");
       } finally {
@@ -262,6 +361,39 @@ export default function AdminDashboard({ onBackToSite }: AdminDashboardProps) {
     }
   };
 
+  const persistConfig = async (updatedConfig: any, token: string): Promise<{ ok: boolean; firestoreSynced: boolean; message?: string }> => {
+    try {
+      const response = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(updatedConfig),
+      });
+
+      if (response.status === 401) {
+        handleLogout();
+        return { ok: false, firestoreSynced: false, message: "Session expired." };
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          ok: true,
+          firestoreSynced: data.firestoreSynced !== false,
+          message: data.warning || data.message || "Saved successfully."
+        };
+      } else {
+        const errData = await response.json();
+        return { ok: false, firestoreSynced: false, message: errData.error || "Failed to update configurations" };
+      }
+    } catch (err: any) {
+      console.error(err);
+      return { ok: false, firestoreSynced: false, message: err.message || "An error occurred while saving." };
+    }
+  };
+
   const handleSaveSettings = async () => {
     if (!config) return;
     setIsSaving(true);
@@ -288,7 +420,15 @@ export default function AdminDashboard({ onBackToSite }: AdminDashboardProps) {
       }
 
       if (response.ok) {
-        setStatus({ type: "success", message: "Hackathon settings updated successfully!" });
+        const data = await response.json();
+        if (data.firestoreSynced !== false) {
+          setStatus({ type: "success", message: "Hackathon settings updated successfully!" });
+        } else {
+          setStatus({
+            type: "warning",
+            message: `Settings saved locally, but failed to sync to live database: ${data.warning || "Firestore sync failed"}.`
+          });
+        }
       } else {
         const errData = await response.json();
         throw new Error(errData.error || "Failed to update configurations");
@@ -696,9 +836,17 @@ export default function AdminDashboard({ onBackToSite }: AdminDashboardProps) {
           <div className={`p-4 mb-6 rounded-2xl border flex items-start gap-3 transition-all ${
             status.type === "success" 
               ? "bg-emerald-950/50 border-emerald-500/30 text-emerald-300" 
-              : "bg-rose-950/50 border-rose-500/30 text-rose-300"
+              : status.type === "warning"
+                ? "bg-amber-950/50 border-amber-500/30 text-amber-300"
+                : "bg-rose-950/50 border-rose-500/30 text-rose-300"
           }`}>
-            {status.type === "success" ? <CheckCircle className="w-5 h-5 shrink-0" /> : <XCircle className="w-5 h-5 shrink-0" />}
+            {status.type === "success" ? (
+              <CheckCircle className="w-5 h-5 shrink-0" />
+            ) : status.type === "warning" ? (
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+            ) : (
+              <XCircle className="w-5 h-5 shrink-0" />
+            )}
             <div className="text-xs sm:text-sm font-medium leading-relaxed">
               {status.message}
             </div>
