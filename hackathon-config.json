@@ -1,7 +1,7 @@
 {
   "name": "Bincom Hackathon September 2026",
   "theme": "Hacking genAI",
-  "edition": "5.0",
+  "edition": "6.0",
   "subtitle": "Building the Next Big Thing with generative AI in 24 Hours or Less.",
   "month": "September",
   "year": "2026",
@@ -11,7 +11,7 @@
   "endTime": "7:00 PM WAT",
   "registrationUrl": "bincom.net/hackathon",
   "physicalNoticeUrl": "http://bincomdevcenter.com/communityevents",
-  "flyerType": "html",
+  "flyerType": "image",
   "flyerImageUrl": "/bincom_hackathon_flyer.jpg",
   "virtualUrl": "https://bincom.net/virtual-hackathon",
   "logoUrl": "/logo.png",
