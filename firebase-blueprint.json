@@ -131,6 +131,30 @@
         }
       },
       "required": ["fullName", "email", "phone", "role", "registeredAt"]
+    },
+    "UploadedAsset": {
+      "title": "Uploaded Asset",
+      "description": "Base64 encoded file data stored as cache in Firestore for cross-instance durability",
+      "type": "object",
+      "properties": {
+        "fileName": {
+          "type": "string",
+          "description": "The safe file name of the asset"
+        },
+        "mimeType": {
+          "type": "string",
+          "description": "MIME type of the asset"
+        },
+        "base64": {
+          "type": "string",
+          "description": "Base64 encoded image string"
+        },
+        "uploadedAt": {
+          "type": "string",
+          "description": "Upload timestamp"
+        }
+      },
+      "required": ["fileName", "mimeType", "base64"]
     }
   },
   "firestore": {
@@ -141,6 +165,10 @@
     "/registrations/{registrationId}": {
       "schema": "Registration",
       "description": "Users registrations collection"
+    },
+    "/uploaded_assets/{assetId}": {
+      "schema": "UploadedAsset",
+      "description": "Cross-instance backup of uploaded flyer/logo files"
     }
   }
 }

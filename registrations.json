@@ -1,0 +1,38 @@
+[
+  {
+    "id": "reg_1784593471597",
+    "fullName": "Charles Stun",
+    "email": "test@example.com",
+    "phone": "1234567890",
+    "role": "participant",
+    "linkedinUrl": "https://linkedin.com/in/test",
+    "registeredAt": "2026-07-21T00:24:31.596Z"
+  },
+  {
+    "id": "reg_1784593542037",
+    "fullName": "Osondu Izuchukwu Charles",
+    "email": "stuncharles@gmail.com",
+    "phone": "08037396133",
+    "role": "participant",
+    "linkedinUrl": "https://www.linkedin.com/in/izuchukwu-osondu-926386239/",
+    "registeredAt": "2026-07-21T00:25:42.037Z"
+  },
+  {
+    "id": "reg_1784594077144",
+    "fullName": "Charles Stun",
+    "email": "stuncharles@gmail.com",
+    "phone": "1234567890",
+    "role": "participant",
+    "linkedinUrl": "https://linkedin.com/in/stuncharles",
+    "registeredAt": "2026-07-21T00:34:37.144Z"
+  },
+  {
+    "id": "reg_1784594362857",
+    "fullName": "Charles Stun",
+    "email": "stuncharles@gmail.com",
+    "phone": "1234567890",
+    "role": "participant",
+    "linkedinUrl": "https://linkedin.com/in/stuncharles",
+    "registeredAt": "2026-07-21T00:39:22.856Z"
+  }
+]

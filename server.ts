@@ -9,7 +9,7 @@ import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from "firebase
 const DEFAULT_CONFIG = {
   name: "Bincom Hackathon September 2026",
   theme: "Hacking genAI",
-  edition: "5.0",
+  edition: "6.0",
   subtitle: "Building the Next Big Thing with generative AI in 24 Hours or Less.",
   month: "September",
   year: "2026",
@@ -19,7 +19,7 @@ const DEFAULT_CONFIG = {
   endTime: "7:00 PM WAT",
   registrationUrl: "bincom.net/hackathon",
   physicalNoticeUrl: "http://bincomdevcenter.com/communityevents",
-  flyerType: "html",
+  flyerType: "image",
   flyerImageUrl: "/bincom_hackathon_flyer.jpg",
   virtualUrl: "https://bincom.net/virtual-hackathon",
   logoUrl: "/logo.png",
@@ -166,8 +166,12 @@ interface FirestoreErrorInfo {
 }
 
 let dbInstance: any = null;
+let isFirestoreDisabled = false;
 
 function getFirestoreDb() {
+  if (isFirestoreDisabled) {
+    throw new Error("Firestore is currently disabled due to API or permission errors.");
+  }
   if (!dbInstance) {
     const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
     if (!fs.existsSync(firebaseConfigPath)) {
@@ -178,14 +182,35 @@ function getFirestoreDb() {
       throw new Error("Firebase apiKey or projectId is missing in firebase-applet-config.json");
     }
     const app = initializeApp(config);
-    dbInstance = getFirestore(app, config.firestoreDatabaseId || "default");
+    const dbId = config.firestoreDatabaseId;
+    if (dbId && dbId !== "(default)" && dbId !== "default") {
+      dbInstance = getFirestore(app, dbId);
+    } else {
+      dbInstance = getFirestore(app);
+    }
   }
   return dbInstance;
 }
 
+function getAssetDocId(fileName: string): string {
+  const base = `asset_${fileName.replace(/\./g, "_")}`;
+  return base.slice(0, 120).replace(/[^a-zA-Z0-9_\-]/g, "_");
+}
+
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errMsg = error instanceof Error ? error.message : String(error);
+  if (
+    errMsg.includes("PERMISSION_DENIED") ||
+    errMsg.includes("permission-denied") ||
+    errMsg.includes("not been used in project") ||
+    errMsg.includes("disabled") ||
+    errMsg.includes("client is offline")
+  ) {
+    console.warn("Firestore API appears to be disabled, offline, or unauthorized. Activating local-only fallback circuit breaker.");
+    isFirestoreDisabled = true;
+  }
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errMsg,
     authInfo: {
       userId: null,
       email: null,
@@ -201,14 +226,41 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
+// Timeout utility to protect Firestore calls from hanging indefinitely
+async function runWithTimeout<T>(promise: Promise<T>, timeoutMs: number = 4000): Promise<T> {
+  let timeoutId: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Firestore operation timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    clearTimeout(timeoutId);
+    return result;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
+
 // Helper to get or initialize config from Firestore with local file fallback
 async function getHackathonConfig() {
+  if (isFirestoreDisabled) {
+    try {
+      if (fs.existsSync(CONFIG_FILE_PATH)) {
+        const fileData = fs.readFileSync(CONFIG_FILE_PATH, "utf-8");
+        return JSON.parse(fileData);
+      }
+    } catch (e) {}
+    return DEFAULT_CONFIG;
+  }
   try {
     const db = getFirestoreDb();
     const docRef = doc(db, "hackathon_settings", "default_config");
     let docSnap;
     try {
-      docSnap = await getDoc(docRef);
+      docSnap = await runWithTimeout(getDoc(docRef));
     } catch (err) {
       handleFirestoreError(err, OperationType.GET, "hackathon_settings/default_config");
       throw err;
@@ -218,7 +270,7 @@ async function getHackathonConfig() {
       return docSnap.data();
     } else {
       try {
-        await setDoc(docRef, DEFAULT_CONFIG);
+        await runWithTimeout(setDoc(docRef, DEFAULT_CONFIG));
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, "hackathon_settings/default_config");
         throw err;
@@ -243,17 +295,22 @@ async function getHackathonConfig() {
 // Helper to save config to Firestore with local backup
 async function saveHackathonConfig(newConfig: typeof DEFAULT_CONFIG) {
   try {
+    fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(newConfig, null, 2), "utf-8");
+  } catch (err) {}
+
+  if (isFirestoreDisabled) {
+    return true;
+  }
+
+  try {
     const db = getFirestoreDb();
     const docRef = doc(db, "hackathon_settings", "default_config");
     try {
-      await setDoc(docRef, newConfig);
+      await runWithTimeout(setDoc(docRef, newConfig));
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, "hackathon_settings/default_config");
       throw err;
     }
-    try {
-      fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(newConfig, null, 2), "utf-8");
-    } catch (err) {}
     return true;
   } catch (error) {
     console.error("Error saving config to Firestore:", error);
@@ -361,20 +418,27 @@ async function checkAndSendDailyReminders() {
 
       // Query all registrations from Firestore, fallback to local file
       let list: any[] = [];
-      try {
-        const db = getFirestoreDb();
-        let querySnapshot;
+      let fetchedFromFirestore = false;
+      if (!isFirestoreDisabled) {
         try {
-          querySnapshot = await getDocs(collection(db, "registrations"));
-        } catch (err) {
-          handleFirestoreError(err, OperationType.LIST, "registrations");
-          throw err;
+          const db = getFirestoreDb();
+          let querySnapshot;
+          try {
+            querySnapshot = await runWithTimeout(getDocs(collection(db, "registrations")));
+          } catch (err) {
+            handleFirestoreError(err, OperationType.LIST, "registrations");
+            throw err;
+          }
+          querySnapshot.forEach((docSnap) => {
+            list.push({ id: docSnap.id, ...docSnap.data() });
+          });
+          fetchedFromFirestore = true;
+        } catch (dbErr) {
+          console.error("Error fetching registrations for reminders from Firestore:", dbErr);
         }
-        querySnapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() });
-        });
-      } catch (dbErr) {
-        console.error("Error fetching registrations for reminders from Firestore:", dbErr);
+      }
+
+      if (!fetchedFromFirestore) {
         if (fs.existsSync(REGISTRATIONS_FILE_PATH)) {
           try {
             list = JSON.parse(fs.readFileSync(REGISTRATIONS_FILE_PATH, "utf-8"));
@@ -461,8 +525,8 @@ setTimeout(() => {
 }, 10000);
 
 
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "bincom_admin";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "BincomGenAIHacks2026!";
+const ADMIN_USERNAME = (process.env.ADMIN_USERNAME || "bincom_admin").trim().replace(/^['"]|['"]$/g, '');
+const ADMIN_PASSWORD = (process.env.ADMIN_PASSWORD || "BincomGenAIHacks2026!").trim().replace(/^['"]|['"]$/g, '');
 const ADMIN_SESSION_TOKEN = "session_" + Math.random().toString(36).substring(2) + Date.now().toString(36);
 
 function requireAdminAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -488,6 +552,87 @@ async function startServer() {
   // Always serve public folder statically so dynamically uploaded flyers are instantly available
   app.use(express.static(path.join(process.cwd(), "public")));
 
+  // API: Serve dynamically uploaded assets with Firestore-backed cloud cache fallback
+  app.get("/api/assets/:fileName", async (req, res, next) => {
+    const { fileName } = req.params;
+    const safeFileName = fileName.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+    const publicPath = path.join(process.cwd(), "public", safeFileName);
+
+    if (fs.existsSync(publicPath)) {
+      return res.sendFile(publicPath);
+    }
+
+    if (isFirestoreDisabled) {
+      return res.status(404).json({ error: "Asset not found and database fallback is disabled" });
+    }
+
+    try {
+      const db = getFirestoreDb();
+      const assetDocId = getAssetDocId(safeFileName);
+      const assetRef = doc(db, "hackathon_settings", assetDocId);
+      const assetSnap = await runWithTimeout(getDoc(assetRef));
+
+      if (assetSnap.exists()) {
+        const data = assetSnap.data();
+        if (data && data.base64) {
+          const buffer = Buffer.from(data.base64, "base64");
+          try {
+            if (!fs.existsSync(path.join(process.cwd(), "public"))) {
+              fs.mkdirSync(path.join(process.cwd(), "public"), { recursive: true });
+            }
+            fs.writeFileSync(publicPath, buffer);
+          } catch (writeErr) {
+            console.error("Failed to write restored asset back to disk:", writeErr);
+          }
+          res.setHeader("Content-Type", data.mimeType || "image/jpeg");
+          return res.send(buffer);
+        }
+      }
+      return res.status(404).json({ error: "Asset not found in cloud cache" });
+    } catch (err) {
+      console.error(`Error fetching asset ${safeFileName} from Firestore:`, err);
+      return res.status(404).json({ error: "Failed to fetch asset from cloud cache" });
+    }
+  });
+
+  // Direct route to support legacy / non-prefixed paths for custom flyers and logos (e.g. /custom_flyer_123.jpg)
+  app.get("/:fileName(custom_flyer_*|logo_*|flyer_*)", async (req, res, next) => {
+    const { fileName } = req.params;
+    const safeFileName = fileName.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+    const publicPath = path.join(process.cwd(), "public", safeFileName);
+
+    if (fs.existsSync(publicPath)) {
+      return res.sendFile(publicPath);
+    }
+
+    if (isFirestoreDisabled) {
+      return next();
+    }
+
+    try {
+      const db = getFirestoreDb();
+      const assetDocId = getAssetDocId(safeFileName);
+      const assetRef = doc(db, "hackathon_settings", assetDocId);
+      const assetSnap = await runWithTimeout(getDoc(assetRef));
+
+      if (assetSnap.exists()) {
+        const data = assetSnap.data();
+        if (data && data.base64) {
+          const buffer = Buffer.from(data.base64, "base64");
+          try {
+            if (!fs.existsSync(path.join(process.cwd(), "public"))) {
+              fs.mkdirSync(path.join(process.cwd(), "public"), { recursive: true });
+            }
+            fs.writeFileSync(publicPath, buffer);
+          } catch (writeErr) {}
+          res.setHeader("Content-Type", data.mimeType || "image/jpeg");
+          return res.send(buffer);
+        }
+      }
+    } catch (err) {}
+    next();
+  });
+
   // API: Get Hackathon config (from Firestore)
   app.get("/api/hackathon", async (req, res) => {
     const configData = await getHackathonConfig();
@@ -496,8 +641,10 @@ async function startServer() {
 
   // API: Admin Login
   app.post("/api/admin/login", (req, res) => {
-    const { username, password } = req.body;
-    if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+    const usernameInput = (req.body.username || "").toString().trim().toLowerCase();
+    const passwordInput = (req.body.password || "").toString().trim();
+    
+    if (usernameInput === ADMIN_USERNAME.toLowerCase() && passwordInput === ADMIN_PASSWORD) {
       res.json({ success: true, token: ADMIN_SESSION_TOKEN });
     } else {
       res.status(401).json({ error: "Invalid username or password" });
@@ -524,20 +671,21 @@ async function startServer() {
   });
 
   // API: Upload Flyer Image (Base64)
-  app.post("/api/upload-flyer", requireAdminAuth, (req, res) => {
-    const { image, fileName } = req.body;
-    if (!image) {
-      return res.status(400).json({ error: "No image data received" });
-    }
-
+  app.post("/api/upload-flyer", requireAdminAuth, async (req, res) => {
     try {
+      const { image, fileName } = req.body || {};
+      if (!image) {
+        return res.status(400).json({ error: "No image data received" });
+      }
+
       // Parse base64 header
       const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
       let buffer: Buffer;
       let extension = "jpg";
+      let mimeType = "image/jpeg";
 
       if (matches && matches.length === 3) {
-        const type = matches[1];
+        mimeType = matches[1];
         buffer = Buffer.from(matches[2], "base64");
         const extMap: Record<string, string> = {
           "image/jpeg": "jpg",
@@ -547,7 +695,7 @@ async function startServer() {
           "image/webp": "webp",
           "image/svg+xml": "svg"
         };
-        extension = extMap[type] || "jpg";
+        extension = extMap[mimeType] || "jpg";
       } else {
         buffer = Buffer.from(image, "base64");
       }
@@ -557,14 +705,44 @@ async function startServer() {
         : `custom_flyer_${Date.now()}.${extension}`;
 
       const publicPath = path.join(process.cwd(), "public", safeFileName);
+      
+      // Ensure public folder exists
+      if (!fs.existsSync(path.dirname(publicPath))) {
+        fs.mkdirSync(path.dirname(publicPath), { recursive: true });
+      }
       fs.writeFileSync(publicPath, buffer);
 
-      // Return the URL for the uploaded file
-      const fileUrl = `/${safeFileName}`;
+      // Save to Firestore for cross-instance durability (under 1MB limit)
+      if (!isFirestoreDisabled) {
+        try {
+          const db = getFirestoreDb();
+          const assetDocId = getAssetDocId(safeFileName);
+          const assetRef = doc(db, "hackathon_settings", assetDocId);
+          const base64Content = buffer.toString("base64");
+          
+          if (buffer.length < 1000000) {
+            await runWithTimeout(setDoc(assetRef, {
+              fileName: safeFileName,
+              mimeType,
+              base64: base64Content,
+              uploadedAt: new Date().toISOString(),
+              isAsset: true
+            }));
+            console.log(`Backed up asset ${safeFileName} to Firestore hackathon_settings with ID ${assetDocId}`);
+          } else {
+            console.warn(`Asset ${safeFileName} is too large (${buffer.length} bytes) to backup to Firestore`);
+          }
+        } catch (dbErr) {
+          console.error(`Failed to backup asset ${safeFileName} to Firestore:`, dbErr);
+        }
+      }
+
+      // Return the URL for the uploaded file using the API route prefix for reliability
+      const fileUrl = `/api/assets/${safeFileName}`;
       res.json({ message: "Flyer image uploaded successfully", url: fileUrl });
     } catch (error: any) {
       console.error("Error saving uploaded flyer:", error);
-      res.status(500).json({ error: "Failed to write flyer file on backend" });
+      res.status(500).json({ error: error.message || "Failed to write flyer file on backend" });
     }
   });
 
@@ -601,18 +779,20 @@ async function startServer() {
 
       let docId = `reg_${Date.now()}`;
 
-      // Save to Firestore, fallback/backup to local file
-      try {
-        const db = getFirestoreDb();
-        const docRef = doc(db, "registrations", docId);
+            // Save to Firestore, fallback/backup to local file
+      if (!isFirestoreDisabled) {
         try {
-          await setDoc(docRef, regData);
-        } catch (err) {
-          handleFirestoreError(err, OperationType.WRITE, `registrations/${docId}`);
-          throw err;
+          const db = getFirestoreDb();
+          const docRef = doc(db, "registrations", docId);
+          try {
+            await runWithTimeout(setDoc(docRef, regData));
+          } catch (err) {
+            handleFirestoreError(err, OperationType.WRITE, `registrations/${docId}`);
+            throw err;
+          }
+        } catch (dbErr) {
+          console.error("Error writing registration to Firestore:", dbErr);
         }
-      } catch (dbErr) {
-        console.error("Error writing registration to Firestore:", dbErr);
       }
 
       // Fallback local file writing
@@ -710,20 +890,27 @@ async function startServer() {
       const roleFilter = req.query.role as string;
       let list: any[] = [];
 
-      try {
-        const db = getFirestoreDb();
-        let querySnapshot;
+      let fetchedFromFirestore = false;
+      if (!isFirestoreDisabled) {
         try {
-          querySnapshot = await getDocs(collection(db, "registrations"));
-        } catch (err) {
-          handleFirestoreError(err, OperationType.LIST, "registrations");
-          throw err;
+          const db = getFirestoreDb();
+          let querySnapshot;
+          try {
+            querySnapshot = await runWithTimeout(getDocs(collection(db, "registrations")));
+          } catch (err) {
+            handleFirestoreError(err, OperationType.LIST, "registrations");
+            throw err;
+          }
+          querySnapshot.forEach((doc) => {
+            list.push({ id: doc.id, ...doc.data() });
+          });
+          fetchedFromFirestore = true;
+        } catch (dbErr) {
+          console.error("Error fetching registrations from Firestore:", dbErr);
         }
-        querySnapshot.forEach((doc) => {
-          list.push({ id: doc.id, ...doc.data() });
-        });
-      } catch (dbErr) {
-        console.error("Error fetching registrations from Firestore:", dbErr);
+      }
+
+      if (!fetchedFromFirestore) {
         if (fs.existsSync(REGISTRATIONS_FILE_PATH)) {
           try {
             list = JSON.parse(fs.readFileSync(REGISTRATIONS_FILE_PATH, "utf-8"));
@@ -869,6 +1056,14 @@ async function startServer() {
       console.error("Error sending test template email:", err);
       res.status(500).json({ success: false, error: err.message || String(err) });
     }
+  });
+
+  // Global error-handling middleware for API endpoints
+  app.use("/api", (err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error("[API Error Handler] Caught error:", err);
+    res.status(err.status || 500).json({
+      error: err.message || "An unexpected server-side error occurred"
+    });
   });
 
   // Vite middleware for development

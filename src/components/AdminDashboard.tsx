@@ -55,21 +55,24 @@ export default function AdminDashboard({ onBackToSite }: AdminDashboardProps) {
     e.preventDefault();
     setLoginError("");
     setIsLoggingIn(true);
+    const trimmedUsername = username.trim();
+    const trimmedPassword = password.trim();
     try {
       const res = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username: trimmedUsername, password: trimmedPassword })
       });
-      const data = await res.json();
-      if (res.ok && data.token) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.token) {
         localStorage.setItem("bincom_admin_token", data.token);
         setIsLoggedIn(true);
       } else {
-        setLoginError(data.error || "Invalid username or password");
+        setLoginError(data?.error || "Invalid username or password");
       }
     } catch (err: any) {
-      setLoginError("Failed to connect to the authentication server.");
+      console.error("Login request failed:", err);
+      setLoginError("Failed to connect to the authentication server. If you are inside the AI Studio iframe, please click the 'Open in new tab' button at the top-right of your preview window and log in there.");
     } finally {
       setIsLoggingIn(false);
     }
@@ -113,9 +116,27 @@ export default function AdminDashboard({ onBackToSite }: AdminDashboardProps) {
           return;
         }
 
-        if (!response.ok) throw new Error("Logo upload failed");
+        const resText = await response.text();
+        if (!response.ok) {
+          let errMsg = `Logo upload failed (Status: ${response.status})`;
+          try {
+            const errData = JSON.parse(resText);
+            errMsg = errData.error || errMsg;
+          } catch (e) {
+            if (resText && resText.length > 0) {
+              errMsg = `${errMsg}: ${resText.slice(0, 150)}`;
+            }
+          }
+          throw new Error(errMsg);
+        }
 
-        const data = await response.json();
+        let data;
+        try {
+          data = JSON.parse(resText);
+        } catch (jsonErr) {
+          throw new Error(`Server returned an invalid response (Status: ${response.status}). The image might be too large or of an unsupported format. Response preview: ${resText.slice(0, 150)}`);
+        }
+
         setConfig((prev: any) => ({ ...prev, logoUrl: data.url }));
         setStatus({ type: "success", message: "Logo uploaded successfully! Save settings to apply." });
       } catch (err: any) {
@@ -160,9 +181,27 @@ export default function AdminDashboard({ onBackToSite }: AdminDashboardProps) {
           return;
         }
 
-        if (!response.ok) throw new Error("Flyer upload failed");
+        const resText = await response.text();
+        if (!response.ok) {
+          let errMsg = `Flyer upload failed (Status: ${response.status})`;
+          try {
+            const errData = JSON.parse(resText);
+            errMsg = errData.error || errMsg;
+          } catch (e) {
+            if (resText && resText.length > 0) {
+              errMsg = `${errMsg}: ${resText.slice(0, 150)}`;
+            }
+          }
+          throw new Error(errMsg);
+        }
 
-        const data = await response.json();
+        let data;
+        try {
+          data = JSON.parse(resText);
+        } catch (jsonErr) {
+          throw new Error(`Server returned an invalid response (Status: ${response.status}). The image might be too large or of an unsupported format. Response preview: ${resText.slice(0, 150)}`);
+        }
+
         setConfig((prev: any) => ({ ...prev, flyerImageUrl: data.url, flyerType: "image" }));
         setStatus({ type: "success", message: "Flyer uploaded successfully! Save settings to apply." });
       } catch (err: any) {
@@ -527,6 +566,11 @@ export default function AdminDashboard({ onBackToSite }: AdminDashboardProps) {
             <p className="text-xs text-slate-400 max-w-xs">
               Access is restricted. Please sign in to verify your administrative credentials and manage the hackathon parameters.
             </p>
+          </div>
+
+          <div className="p-3.5 bg-lime-400/5 border border-lime-400/25 rounded-2xl text-[11px] text-lime-400 leading-normal">
+            <p className="font-semibold mb-1">💡 Iframe Preview Notice:</p>
+            Some modern browsers block authentication requests/cookies inside embedded iframes. If login fails, please open the app in a <strong>new tab</strong> using the button at the top-right of your preview window and sign in there.
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">

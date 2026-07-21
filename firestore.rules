@@ -23,5 +23,11 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isValidId(registrationId) || registrationId != null;
     }
+
+    // 4. Uploaded Assets Collection
+    match /uploaded_assets/{assetId} {
+      allow read: if true;
+      allow write: if isValidId(assetId) || assetId != null;
+    }
   }
 }

@@ -123,19 +123,19 @@ export default function About({ config, onUpdate }: AboutProps) {
                 {/* Left Section: Texts and details (7 spans) */}
                 <div className="md:col-span-7 p-6 sm:p-10 pt-4 flex flex-col justify-between space-y-8">
                   
-                  {/* Category Pill: "Hacking genAI" with White Background and Green Text */}
+                  {/* Category Pill: config.theme with White Background and Green Text */}
                   <div>
                     <span className="inline-block bg-white text-[#013518] font-display font-black text-xs sm:text-sm px-6 py-2 rounded-full shadow-lg border border-slate-100 select-none uppercase tracking-wide">
-                      Hacking genAI
+                      {config.theme || "Hacking genAI"}
                     </span>
                   </div>
 
                   {/* Large Flyer Title Heading */}
                   <div className="space-y-4">
                     <h3 className="text-4xl sm:text-5xl md:text-[54px] font-display font-black text-white tracking-tight leading-none uppercase select-none">
-                      Hac&lt;/ing&gt; <br />
+                      {config.theme ? config.theme.split(" ")[0] : "Hacking"} <br />
                       <span className="text-white font-extrabold tracking-tight block mt-2 text-4xl sm:text-5xl md:text-[58px]">
-                        {config.theme.split(" ")[1] || "GenAI"} {config.edition}
+                        {config.theme ? config.theme.split(" ").slice(1).join(" ") : "genAI"} {config.edition}
                       </span>
                     </h3>
                     <p className="text-slate-100/90 text-sm sm:text-base leading-relaxed font-normal max-w-md select-none">

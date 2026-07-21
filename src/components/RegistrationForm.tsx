@@ -16,6 +16,7 @@ export default function RegistrationForm({ config }: RegistrationFormProps) {
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [ticket, setTicket] = useState<Registration | null>(null);
   const [showRecentTicket, setShowRecentTicket] = useState(false);
 
@@ -57,10 +58,10 @@ export default function RegistrationForm({ config }: RegistrationFormProps) {
 const handleSubmit = async (e: React.FormEvent) => {
 
   e.preventDefault();
-
   if (!validateForm()) return;
-
   setIsSubmitting(true);
+  // Clear previous errors
+  setSubmitError(null);
 
   try {
     // Send the user's details to the n8n webhook as requested
@@ -133,25 +134,24 @@ const handleSubmit = async (e: React.FormEvent) => {
 
   } catch (error: any) {
     console.error("Registration endpoint failed:", error);
-    alert(error.message || "Registration failed to connect with the server. Please try again.");
+    setSubmitError(error.message || "Registration failed to connect with the server. Please try again.");
   } finally {
     setIsSubmitting(false);
   }
 
 };
   const handleCancelRegistration = () => {
-    if (window.confirm("Are you sure you want to cancel your registration? This will delete your local access ticket.")) {
-      localStorage.removeItem("bincom_hackathon_registration");
-      setTicket(null);
-      setShowRecentTicket(false);
-      // Reset form fields
-      setFullName("");
-      setEmail("");
-      setPhone("");
-      setRole("");
-      setLinkedinUrl("");
-      setAcceptTerms(false);
-    }
+    localStorage.removeItem("bincom_hackathon_registration");
+    setTicket(null);
+    setShowRecentTicket(false);
+    // Reset form fields
+    setFullName("");
+    setEmail("");
+    setPhone("");
+    setRole("");
+    setLinkedinUrl("");
+    setAcceptTerms(false);
+    setSubmitError(null);
   };
 
   return (
@@ -393,6 +393,12 @@ const handleSubmit = async (e: React.FormEvent) => {
                   <p className="text-rose-500 text-[11px] font-medium mt-1">{errors.acceptTerms}</p>
                 )}
               </div>
+
+              {submitError && (
+                <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 text-xs font-semibold leading-relaxed">
+                  {submitError}
+                </div>
+              )}
 
               {/* Submit Button */}
               <div className="pt-4">
